@@ -56,7 +56,7 @@ func TestComputeHashcash(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 36258, result.Counter)
 	})
-	t.Run("impossible challenge", func(t *testing.T) {
+	t.Run("Impossible challenge", func(t *testing.T) {
 		date := time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC)
 		input := HashcashData{
 			Version:    1,

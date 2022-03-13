@@ -4,13 +4,11 @@ import (
 	"bufio"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg"
-	"io"
 	"math/rand"
 	"net"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -28,7 +26,28 @@ var Quotes = []string{
 		"as the children of Israel, and not slay them",
 }
 
-func HandleConnection(conn net.Conn) {
+var ErrQuit = errors.New("client requests to close connection")
+
+func Run(address string) error {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	// Close the listener when the application closes.
+	defer listener.Close()
+	fmt.Println("listening...", listener.Addr())
+	for {
+		// Listen for an incoming connection.
+		conn, err := listener.Accept()
+		if err != nil {
+			return fmt.Errorf("error accept connection: %w", err)
+		}
+		// Handle connections in a new goroutine.
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) {
 	fmt.Println("new client:", conn.RemoteAddr())
 	defer conn.Close()
 
@@ -36,106 +55,90 @@ func HandleConnection(conn net.Conn) {
 
 	for {
 		req, err := reader.ReadString('\n')
-
-		switch err {
-		case nil:
-			handleRequest(req, conn)
-			req := strings.TrimSpace(req)
-			if req == ":QUIT" {
-				fmt.Println("client requested server to close the connection so closing")
-				return
-			} else {
-				fmt.Println("msg received:", req)
-			}
-		case io.EOF:
-			fmt.Println("client closed the connection by terminating the process")
-			return
-		default:
-			fmt.Printf("error: %v\n", err)
+		if err != nil {
+			fmt.Println("err read connection:", err)
 			return
 		}
-
-		_, err = conn.Write([]byte("response\n"))
+		msg, err := ProcessRequest(req, conn.RemoteAddr().String())
 		if err != nil {
-			fmt.Printf("failed to respond to client: %v\n", err)
-		} else {
-			fmt.Println("msg sent: response")
+			fmt.Println("err process request:", err)
+			return
+		}
+		if msg != nil {
+			err := sendMsg(*msg, conn)
+			if err != nil {
+				fmt.Println("err send message:", err)
+			}
 		}
 	}
 }
 
-func handleRequest(msg string, conn net.Conn) bool {
-	msg = strings.TrimSpace(msg)
-	var msgType int
-	parts := strings.Split(msg, "|")
-	if len(parts) != 0 {
-		fmt.Printf("msg %s doesn't match protocol\n", msg)
-		return true
-	}
-	msgType, err := strconv.Atoi(parts[0])
+// ProcessRequest - process request from client
+// returns not-nil pointer to Message if needed to send it back to client
+func ProcessRequest(msgStr string, clientInfo string) (*pkg.Message, error) {
+	msg, err := pkg.ParseMessage(msgStr)
 	if err != nil {
-		fmt.Printf("cannot parse header %s\n", parts[0])
-		return true
+		return nil, err
 	}
-	switch msgType {
+	// switch by header of msg
+	switch msg.Header {
 	case pkg.Quit:
-		fmt.Printf("client %s requests quit\n", conn.RemoteAddr())
-		return false
+		return nil, ErrQuit
 	case pkg.RequestChallenge:
-		fmt.Printf("client %s requests challenge\n", conn.RemoteAddr())
-		msg := pkg.Message{
-			Header: pkg.ResponseChallenge,
-		}
+		fmt.Printf("client %s requests challenge\n", clientInfo)
+		// create new challenge for client
 		date := time.Now()
 		hashcash := pkg.HashcashData{
 			Version:    1,
-			ZerosCount: 5,
+			ZerosCount: 3,
 			Date:       date.Unix(),
-			Resource:   conn.RemoteAddr().String(),
+			Resource:   clientInfo,
 			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", rand.Intn(100000)))),
 			Counter:    0,
 		}
 		hashcashMarshaled, err := json.Marshal(hashcash)
 		if err != nil {
-			fmt.Printf("err marshal hashcash: %v\n", err)
-			msg.Data = "error marshal hashcash to json"
-			sendMsg(msg, conn)
-			return true
+			return nil, fmt.Errorf("err marshal hashcash: %v", err)
 		}
-		msg.Data = string(hashcashMarshaled)
-		sendMsg(msg, conn)
-		return true
-	case pkg.RequestResource:
 		msg := pkg.Message{
-			Header: pkg.ResponseResource,
+			Header:  pkg.ResponseChallenge,
+			Payload: string(hashcashMarshaled),
 		}
-		//parse client's solution
+		return &msg, nil
+	case pkg.RequestResource:
+		fmt.Printf("client %s requests resource with payload %s\n", clientInfo, msg.Payload)
+		// parse client's solution
 		var hashcash pkg.HashcashData
-		err := json.Unmarshal([]byte(parts[1]), &hashcash)
+		err := json.Unmarshal([]byte(msg.Payload), &hashcash)
 		if err != nil {
-			msg.Data = "error parse hashcash json"
-			sendMsg(msg, conn)
-			return true
+			return nil, fmt.Errorf("err unmarshal hashcash: %v", err)
 		}
-		_, err = hashcash.ComputeHashcash(hashcash.Counter)
+		if hashcash.Resource != clientInfo {
+			return nil, fmt.Errorf("invalid hashcash resource")
+		}
+		//to prevent indefinite computing on server if client sent hashcash with 0 counter
+		maxIter := hashcash.Counter
+		if maxIter == 0 {
+			maxIter = 1
+		}
+		_, err = hashcash.ComputeHashcash(maxIter)
 		if err != nil {
-			msg.Data = "error verify hashcash"
-			sendMsg(msg, conn)
-			return true
+			return nil, fmt.Errorf("invalid hashcash")
 		}
 		//get random quote
-		msg.Data = Quotes[rand.Intn(4)]
-		return true
+		fmt.Printf("client %s succesfully computed hashcash %s\n", clientInfo, msg.Payload)
+		msg := pkg.Message{
+			Header:  pkg.ResponseResource,
+			Payload: Quotes[rand.Intn(4)],
+		}
+		return &msg, nil
 	default:
-		fmt.Printf("unknown header %d\n", msgType)
-		return false
+		return nil, fmt.Errorf("unknown header")
 	}
 }
 
-func sendMsg(msg pkg.Message, conn net.Conn) {
+func sendMsg(msg pkg.Message, conn net.Conn) error {
 	msgStr := fmt.Sprintf("%s\n", msg.Stringify())
 	_, err := conn.Write([]byte(msgStr))
-	if err != nil {
-		fmt.Printf("err send message to %s: %v\n", conn.RemoteAddr(), err)
-	}
+	return err
 }
