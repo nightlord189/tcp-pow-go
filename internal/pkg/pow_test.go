@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-type TestCase struct {
-	input    interface{}
-	expected interface{}
-}
-
 func TestHash(t *testing.T) {
 	result := sha1Hash("testdatalong 1231378612")
 	assert.Equal(t, "26e48dc4c6fd473c87e9c4928d8f4bd45f508603", result)
