@@ -24,4 +24,10 @@ func main() {
 	}
 	dd, _ = dd.ComputeHashcash(-1)
 	fmt.Println(dd)
+
+	msg := pkg.Message{
+		Header: pkg.RequestChallenge,
+		Data:   "ddd",
+	}
+	fmt.Println(msg.Stringify())
 }

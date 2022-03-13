@@ -40,16 +40,14 @@ func IsHashCorrect(hash string, zerosCount int) bool {
 }
 
 func (h HashcashData) ComputeHashcash(maxIterations int) (HashcashData, error) {
-	for true {
+	for h.Counter <= maxIterations || maxIterations <= 0 {
 		header := h.Stringify()
 		hash := sha1Hash(header)
 		//fmt.Println(header, hash)
 		if IsHashCorrect(hash, h.ZerosCount) {
 			return h, nil
-		} else if h.Counter > maxIterations && maxIterations > 0 {
-			return h, fmt.Errorf("max iterations exceeded")
 		}
 		h.Counter++
 	}
-	return h, fmt.Errorf("unknown error")
+	return h, fmt.Errorf("max iterations exceeded")
 }
