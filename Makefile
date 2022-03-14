@@ -10,3 +10,6 @@ start-server:
 
 start-client:
 	go run cmd/client/main.go
+
+start:
+	docker-compose up --abort-on-container-exit

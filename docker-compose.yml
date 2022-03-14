@@ -1,0 +1,24 @@
+version: '3.7'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server.Dockerfile
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: '3333'
+    ports:
+      - '3333:3333'
+    image: nightlord189/tcp-pow-go/server:latest
+    restart: 'no'
+
+  client:
+    build:
+      context: .
+      dockerfile: client.Dockerfile
+    environment:
+      SERVER_HOST: "server"
+      SERVER_PORT: '3333'
+    image: nightlord189/tcp-pow-go/client:latest
+    restart: 'no'
