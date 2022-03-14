@@ -22,3 +22,5 @@ services:
       SERVER_PORT: '3333'
     image: nightlord189/tcp-pow-go/client:latest
     restart: 'no'
+    depends_on:
+      - server

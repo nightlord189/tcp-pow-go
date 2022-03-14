@@ -23,7 +23,7 @@ func Run(ctx context.Context, address string) error {
 	fmt.Println("connected to", address)
 	defer conn.Close()
 
-	// client will send new requests every 5 seconds endlessly
+	// client will send new request every 5 seconds endlessly
 	for {
 		message, err := HandleConnection(ctx, conn, conn)
 		if err != nil {
