@@ -2,11 +2,14 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/nightlord189/tcp-pow-go/internal/pkg"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/config"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/pow"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/protocol"
 	"math/rand"
 	"net"
 	"time"
@@ -28,14 +31,14 @@ var Quotes = []string{
 
 var ErrQuit = errors.New("client requests to close connection")
 
-func Run(address string) error {
+func Run(ctx context.Context, address string) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
 	// Close the listener when the application closes.
 	defer listener.Close()
-	fmt.Println("listening...", listener.Addr())
+	fmt.Println("listening", listener.Addr())
 	for {
 		// Listen for an incoming connection.
 		conn, err := listener.Accept()
@@ -43,11 +46,11 @@ func Run(address string) error {
 			return fmt.Errorf("error accept connection: %w", err)
 		}
 		// Handle connections in a new goroutine.
-		go handleConnection(conn)
+		go handleConnection(ctx, conn)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(ctx context.Context, conn net.Conn) {
 	fmt.Println("new client:", conn.RemoteAddr())
 	defer conn.Close()
 
@@ -59,7 +62,7 @@ func handleConnection(conn net.Conn) {
 			fmt.Println("err read connection:", err)
 			return
 		}
-		msg, err := ProcessRequest(req, conn.RemoteAddr().String())
+		msg, err := ProcessRequest(ctx, req, conn.RemoteAddr().String())
 		if err != nil {
 			fmt.Println("err process request:", err)
 			return
@@ -75,22 +78,23 @@ func handleConnection(conn net.Conn) {
 
 // ProcessRequest - process request from client
 // returns not-nil pointer to Message if needed to send it back to client
-func ProcessRequest(msgStr string, clientInfo string) (*pkg.Message, error) {
-	msg, err := pkg.ParseMessage(msgStr)
+func ProcessRequest(ctx context.Context, msgStr string, clientInfo string) (*protocol.Message, error) {
+	msg, err := protocol.ParseMessage(msgStr)
 	if err != nil {
 		return nil, err
 	}
 	// switch by header of msg
 	switch msg.Header {
-	case pkg.Quit:
+	case protocol.Quit:
 		return nil, ErrQuit
-	case pkg.RequestChallenge:
+	case protocol.RequestChallenge:
 		fmt.Printf("client %s requests challenge\n", clientInfo)
 		// create new challenge for client
+		conf := ctx.Value("config").(*config.Config)
 		date := time.Now()
-		hashcash := pkg.HashcashData{
+		hashcash := pow.HashcashData{
 			Version:    1,
-			ZerosCount: 3,
+			ZerosCount: conf.HashcashZerosCount,
 			Date:       date.Unix(),
 			Resource:   clientInfo,
 			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", rand.Intn(100000)))),
@@ -100,15 +104,15 @@ func ProcessRequest(msgStr string, clientInfo string) (*pkg.Message, error) {
 		if err != nil {
 			return nil, fmt.Errorf("err marshal hashcash: %v", err)
 		}
-		msg := pkg.Message{
-			Header:  pkg.ResponseChallenge,
+		msg := protocol.Message{
+			Header:  protocol.ResponseChallenge,
 			Payload: string(hashcashMarshaled),
 		}
 		return &msg, nil
-	case pkg.RequestResource:
+	case protocol.RequestResource:
 		fmt.Printf("client %s requests resource with payload %s\n", clientInfo, msg.Payload)
 		// parse client's solution
-		var hashcash pkg.HashcashData
+		var hashcash pow.HashcashData
 		err := json.Unmarshal([]byte(msg.Payload), &hashcash)
 		if err != nil {
 			return nil, fmt.Errorf("err unmarshal hashcash: %v", err)
@@ -127,8 +131,8 @@ func ProcessRequest(msgStr string, clientInfo string) (*pkg.Message, error) {
 		}
 		//get random quote
 		fmt.Printf("client %s succesfully computed hashcash %s\n", clientInfo, msg.Payload)
-		msg := pkg.Message{
-			Header:  pkg.ResponseResource,
+		msg := protocol.Message{
+			Header:  protocol.ResponseResource,
 			Payload: Quotes[rand.Intn(4)],
 		}
 		return &msg, nil
@@ -137,7 +141,7 @@ func ProcessRequest(msgStr string, clientInfo string) (*pkg.Message, error) {
 	}
 }
 
-func sendMsg(msg pkg.Message, conn net.Conn) error {
+func sendMsg(msg protocol.Message, conn net.Conn) error {
 	msgStr := fmt.Sprintf("%s\n", msg.Stringify())
 	_, err := conn.Write([]byte(msgStr))
 	return err

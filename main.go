@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/nightlord189/tcp-pow-go/internal/pkg"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/pow"
 	"time"
 )
 
@@ -11,7 +11,7 @@ func main() {
 	fmt.Println("start")
 
 	date := time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC)
-	hashcash := pkg.HashcashData{
+	hashcash := pow.HashcashData{
 		Version:    1,
 		ZerosCount: 3,
 		Date:       date.Unix(),

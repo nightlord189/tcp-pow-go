@@ -1,10 +1,13 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/nightlord189/tcp-pow-go/internal/pkg"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/config"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/pow"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"strings"
@@ -28,13 +31,16 @@ func (m MockConnection) Write(p []byte) (n int, err error) {
 func TestHandleConnection(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, "config", &config.Config{HashcashMaxIterations: 1000000})
+
 	t.Run("Write error", func(t *testing.T) {
 		mock := MockConnection{
 			WriteFunc: func(p []byte) (int, error) {
 				return 0, fmt.Errorf("test write error")
 			},
 		}
-		_, err := HandleConnection(mock, mock)
+		_, err := HandleConnection(ctx, mock, mock)
 		assert.Error(t, err)
 		assert.Equal(t, "err send request: test write error", err.Error())
 	})
@@ -48,7 +54,7 @@ func TestHandleConnection(t *testing.T) {
 				return 0, fmt.Errorf("test read error")
 			},
 		}
-		_, err := HandleConnection(mock, mock)
+		_, err := HandleConnection(ctx, mock, mock)
 		assert.Error(t, err)
 		assert.Equal(t, "err read msg: test read error", err.Error())
 	})
@@ -62,7 +68,7 @@ func TestHandleConnection(t *testing.T) {
 				return fillTestReadBytes("||\n", p), nil
 			},
 		}
-		_, err := HandleConnection(mock, mock)
+		_, err := HandleConnection(ctx, mock, mock)
 		assert.Error(t, err)
 		assert.Equal(t, "err parse msg: message doesn't match protocol", err.Error())
 	})
@@ -73,17 +79,17 @@ func TestHandleConnection(t *testing.T) {
 				return 0, nil
 			},
 			ReadFunc: func(p []byte) (int, error) {
-				return fillTestReadBytes(fmt.Sprintf("%d|{wrong_json}\n", pkg.ResponseChallenge), p), nil
+				return fillTestReadBytes(fmt.Sprintf("%d|{wrong_json}\n", protocol.ResponseChallenge), p), nil
 			},
 		}
-		_, err := HandleConnection(mock, mock)
+		_, err := HandleConnection(ctx, mock, mock)
 		assert.Error(t, err)
 		assert.True(t, strings.Contains(err.Error(), "err parse hashcash"))
 	})
 
 	t.Run("Success", func(t *testing.T) {
 		date := time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC)
-		hashcash := pkg.HashcashData{
+		hashcash := pow.HashcashData{
 			Version:    1,
 			ZerosCount: 3,
 			Date:       date.Unix(),
@@ -103,9 +109,9 @@ func TestHandleConnection(t *testing.T) {
 					writeAttempt++
 					assert.Equal(t, "1|\n", string(p))
 				} else {
-					msg, err := pkg.ParseMessage(string(p))
+					msg, err := protocol.ParseMessage(string(p))
 					require.NoError(t, err)
-					var writtenHashcash pkg.HashcashData
+					var writtenHashcash pow.HashcashData
 					err = json.Unmarshal([]byte(msg.Payload), &writtenHashcash)
 					require.NoError(t, err)
 					// checking that counter increased
@@ -120,14 +126,14 @@ func TestHandleConnection(t *testing.T) {
 					marshaled, err := json.Marshal(hashcash)
 					require.NoError(t, err)
 					readAttempt++
-					return fillTestReadBytes(fmt.Sprintf("%d|%s\n", pkg.ResponseChallenge, string(marshaled)), p), nil
+					return fillTestReadBytes(fmt.Sprintf("%d|%s\n", protocol.ResponseChallenge, string(marshaled)), p), nil
 				} else {
 					// second read, send quote
-					return fillTestReadBytes(fmt.Sprintf("%d|test quote\n", pkg.ResponseChallenge), p), nil
+					return fillTestReadBytes(fmt.Sprintf("%d|test quote\n", protocol.ResponseChallenge), p), nil
 				}
 			},
 		}
-		response, err := HandleConnection(mock, mock)
+		response, err := HandleConnection(ctx, mock, mock)
 		assert.NoError(t, err)
 		assert.Equal(t, "test quote", response)
 	})
