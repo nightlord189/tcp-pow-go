@@ -49,7 +49,7 @@ func TestProcessRequest(t *testing.T) {
 		var hashcash pkg.HashcashData
 		err = json.Unmarshal([]byte(msg.Payload), &hashcash)
 		require.NoError(t, err)
-		assert.Equal(t, 5, hashcash.ZerosCount)
+		assert.Equal(t, 3, hashcash.ZerosCount)
 		assert.Equal(t, "client1", hashcash.Resource)
 		assert.NotEmpty(t, hashcash.Rand)
 	})

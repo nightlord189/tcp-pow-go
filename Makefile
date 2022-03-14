@@ -2,6 +2,7 @@ install:
 	go mod download
 
 test:
+	go clean --testcache
 	go test ./...
 
 start-server:
