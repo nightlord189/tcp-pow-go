@@ -76,7 +76,7 @@ After comparison, I chose Hashcash. Other algorithms have next disadvantages:
 + In Merkle tree server should do too much work to validate client's solution. For tree consists of 4 leaves and 3 depth server will spend 3 hash calculations.
 + In guided tour puzzle client should regularly request server about next parts of guide, that complicates logic of protocol.
 
-Hashcahs, instead has next advantages:
+Hashcash, instead has next advantages:
 + simplicity of implementation
 + lots of documentation and articles with description
 + simplicity of validation on server side
@@ -96,7 +96,7 @@ But all of those disadvantages could be solved in real production environment.
 
 ## 6. Structure of the project
 Project structure implements [Go-layout](https://github.com/golang-standards/project-layout) pattern.
-Existed directories:
+Existing directories:
 + cmd/client - main.go for client
 + cmd/server - main.go for server
 + config - config files for both server and client
