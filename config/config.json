@@ -2,5 +2,6 @@
   "ServerHost":"localhost",
   "ServerPort":3333,
   "HashcashZerosCount":3,
+  "HashcashDuration": 300,
   "HashcashMaxIterations":1000000
 }

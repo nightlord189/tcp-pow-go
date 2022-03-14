@@ -105,6 +105,7 @@ Existing directories:
 + internal/pkg/config - logic of parsing config file and env variable
 + internal/pkg/pow - logic of chosen PoW algorithm (Hashcash)
 + internal/pkg/protocol - constants, models and parsing logic for implemented TCP-protocol
++ internal/pkg/clock - internal struct for getting current time (and be easily mocked in tests)
 
 ## 7. Ways to improve
 Of course, every project could be improved. This project also has some ways to improve:

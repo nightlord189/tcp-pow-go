@@ -15,11 +15,23 @@ import (
 	"time"
 )
 
-func TestProcessRequest(t *testing.T) {
-	t.Parallel()
+// MockClock - mock for Clock interface (to work with predefined Now)
+type MockClock struct {
+	NowFunc func() time.Time
+}
 
+func (m *MockClock) Now() time.Time {
+	if m.NowFunc != nil {
+		return m.NowFunc()
+	}
+	return time.Now()
+}
+
+func TestProcessRequest(t *testing.T) {
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "config", &config.Config{HashcashZerosCount: 3})
+	ctx = context.WithValue(ctx, "config", &config.Config{HashcashZerosCount: 3, HashcashDuration: 300})
+	mockClock := MockClock{}
+	ctx = context.WithValue(ctx, "clock", &mockClock)
 
 	t.Run("Quit request", func(t *testing.T) {
 		input := fmt.Sprintf("%d|", protocol.Quit)
@@ -105,6 +117,27 @@ func TestProcessRequest(t *testing.T) {
 	})
 
 	t.Run("Request resource with invalid solution", func(t *testing.T) {
+		mockClock.NowFunc = func() time.Time {
+			return time.Date(2022, 3, 13, 2, 40, 0, 0, time.UTC)
+		}
+		hashcash := pow.HashcashData{
+			Version:    1,
+			ZerosCount: 10,
+			Date:       time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC).Unix(),
+			Resource:   "client1",
+			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", 123460))),
+			Counter:    100,
+		}
+		marshaled, err := json.Marshal(hashcash)
+		require.NoError(t, err)
+		input := fmt.Sprintf("%d|%s", protocol.RequestResource, string(marshaled))
+		msg, err := ProcessRequest(ctx, input, "client1")
+		require.Error(t, err)
+		assert.Nil(t, msg)
+		assert.Equal(t, "challenge expired", err.Error())
+	})
+
+	t.Run("Request resource with expired solution", func(t *testing.T) {
 		hashcash := pow.HashcashData{
 			Version:    1,
 			ZerosCount: 10,
@@ -123,6 +156,9 @@ func TestProcessRequest(t *testing.T) {
 	})
 
 	t.Run("Request resource with correct solution", func(t *testing.T) {
+		mockClock.NowFunc = func() time.Time {
+			return time.Date(2022, 3, 13, 2, 32, 0, 0, time.UTC)
+		}
 		date := time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC)
 		hashcash := pow.HashcashData{
 			Version:    1,

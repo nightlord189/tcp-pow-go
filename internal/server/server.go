@@ -32,6 +32,11 @@ var Quotes = []string{
 
 var ErrQuit = errors.New("client requests to close connection")
 
+// Clock  - interface for easier mock time.Now in tests
+type Clock interface {
+	Now() time.Time
+}
+
 // Run - main function, launches server to listen on given address and handle new connections
 func Run(ctx context.Context, address string) error {
 	listener, err := net.Listen("tcp", address)
@@ -93,7 +98,8 @@ func ProcessRequest(ctx context.Context, msgStr string, clientInfo string) (*pro
 		fmt.Printf("client %s requests challenge\n", clientInfo)
 		// create new challenge for client
 		conf := ctx.Value("config").(*config.Config)
-		date := time.Now()
+		clock := ctx.Value("clock").(Clock)
+		date := clock.Now()
 		hashcash := pow.HashcashData{
 			Version:    1,
 			ZerosCount: conf.HashcashZerosCount,
@@ -119,8 +125,15 @@ func ProcessRequest(ctx context.Context, msgStr string, clientInfo string) (*pro
 		if err != nil {
 			return nil, fmt.Errorf("err unmarshal hashcash: %v", err)
 		}
+		// validate hashcash params
 		if hashcash.Resource != clientInfo {
 			return nil, fmt.Errorf("invalid hashcash resource")
+		}
+		conf := ctx.Value("config").(*config.Config)
+		clock := ctx.Value("clock").(Clock)
+		// sent solution should not be outdated
+		if clock.Now().Unix()-hashcash.Date > conf.HashcashDuration {
+			return nil, fmt.Errorf("challenge expired")
 		}
 		//to prevent indefinite computing on server if client sent hashcash with 0 counter
 		maxIter := hashcash.Counter

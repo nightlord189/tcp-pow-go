@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/clock"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg/config"
 	"github.com/nightlord189/tcp-pow-go/internal/server"
+	"math/rand"
+	"time"
 )
 
 func main() {
@@ -20,7 +23,11 @@ func main() {
 	// init context to pass config down
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "config", configInst)
+	ctx = context.WithValue(ctx, "clock", clock.SystemClock{})
 	address := fmt.Sprintf("%s:%d", configInst.ServerHost, configInst.ServerPort)
+
+	// seend random generator to randomize order of quotes
+	rand.Seed(time.Now().UnixNano())
 
 	// run server
 	err = server.Run(ctx, address)
