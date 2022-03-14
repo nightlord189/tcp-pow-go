@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// MockConnection - mocks tcp connection by two interfaces (reader and writer) and funcs
 type MockConnection struct {
 	ReadFunc  func([]byte) (int, error)
 	WriteFunc func([]byte) (int, error)

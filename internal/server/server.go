@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// Quotes - const array of quotes to respond on client's request
 var Quotes = []string{
 	"All saints who remember to keep and do these sayings, " +
 		"walking in obedience to the commandments, " +
@@ -31,6 +32,7 @@ var Quotes = []string{
 
 var ErrQuit = errors.New("client requests to close connection")
 
+// Run - main function, launches server to listen on given address and handle new connections
 func Run(ctx context.Context, address string) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -141,6 +143,7 @@ func ProcessRequest(ctx context.Context, msgStr string, clientInfo string) (*pro
 	}
 }
 
+// sendMsg - send protocol message to connection
 func sendMsg(msg protocol.Message, conn net.Conn) error {
 	msgStr := fmt.Sprintf("%s\n", msg.Stringify())
 	_, err := conn.Write([]byte(msgStr))

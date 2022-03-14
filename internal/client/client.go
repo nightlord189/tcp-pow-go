@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// Run - main function, launches client to connect and work with server on address
 func Run(ctx context.Context, address string) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -22,6 +23,7 @@ func Run(ctx context.Context, address string) error {
 	fmt.Println("connected to", address)
 	defer conn.Close()
 
+	// client will send new requests every 5 seconds endlessly
 	for {
 		message, err := HandleConnection(ctx, conn, conn)
 		if err != nil {
@@ -37,6 +39,7 @@ func Run(ctx context.Context, address string) error {
 // 2. compute hashcash to check Proof of Work
 // 3. send hashcash solution back to server
 // 4. get result quote from server
+// readerConn and writerConn divided to more convenient mock on testing
 func HandleConnection(ctx context.Context, readerConn io.Reader, writerConn io.Writer) (string, error) {
 	reader := bufio.NewReader(readerConn)
 
@@ -99,10 +102,12 @@ func HandleConnection(ctx context.Context, readerConn io.Reader, writerConn io.W
 	return msg.Payload, nil
 }
 
+// readConnMsg - read string message from connection
 func readConnMsg(reader *bufio.Reader) (string, error) {
 	return reader.ReadString('\n')
 }
 
+// sendMsg - send protocol message to connection
 func sendMsg(msg protocol.Message, conn io.Writer) error {
 	msgStr := fmt.Sprintf("%s\n", msg.Stringify())
 	_, err := conn.Write([]byte(msgStr))
