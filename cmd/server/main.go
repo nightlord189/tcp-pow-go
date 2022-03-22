@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/cache"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg/clock"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg/config"
 	"github.com/nightlord189/tcp-pow-go/internal/server"
@@ -24,13 +25,20 @@ func main() {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "config", configInst)
 	ctx = context.WithValue(ctx, "clock", clock.SystemClock{})
-	address := fmt.Sprintf("%s:%d", configInst.ServerHost, configInst.ServerPort)
 
-	// seend random generator to randomize order of quotes
+	cacheInst, err := cache.InitRedisCache(ctx, configInst.CacheHost, configInst.CachePort)
+	if err != nil {
+		fmt.Println("error init cache:", err)
+		return
+	}
+	ctx = context.WithValue(ctx, "cache", cacheInst)
+
+	// seed random generator to randomize order of quotes
 	rand.Seed(time.Now().UnixNano())
 
 	// run server
-	err = server.Run(ctx, address)
+	serverAddress := fmt.Sprintf("%s:%d", configInst.ServerHost, configInst.ServerPort)
+	err = server.Run(ctx, serverAddress)
 	if err != nil {
 		fmt.Println("server error:", err)
 	}

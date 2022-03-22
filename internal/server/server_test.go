@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/nightlord189/tcp-pow-go/internal/pkg/cache"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg/config"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg/pow"
 	"github.com/nightlord189/tcp-pow-go/internal/pkg/protocol"
@@ -32,6 +33,10 @@ func TestProcessRequest(t *testing.T) {
 	ctx = context.WithValue(ctx, "config", &config.Config{HashcashZerosCount: 3, HashcashDuration: 300})
 	mockClock := MockClock{}
 	ctx = context.WithValue(ctx, "clock", &mockClock)
+	cacheInst := cache.InitInMemoryCache(&mockClock)
+	ctx = context.WithValue(ctx, "cache", cacheInst)
+
+	const randKey = 123460
 
 	t.Run("Quit request", func(t *testing.T) {
 		input := fmt.Sprintf("%d|", protocol.Quit)
@@ -86,7 +91,7 @@ func TestProcessRequest(t *testing.T) {
 			ZerosCount: 4,
 			Date:       time.Now().Unix(),
 			Resource:   "client2",
-			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", 123460))),
+			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", randKey))),
 			Counter:    100,
 		}
 		marshaled, err := json.Marshal(hashcash)
@@ -99,12 +104,14 @@ func TestProcessRequest(t *testing.T) {
 	})
 
 	t.Run("Request resource with invalid solution and 0 counter", func(t *testing.T) {
+		cacheInst.Add(randKey, 100)
+
 		hashcash := pow.HashcashData{
 			Version:    1,
 			ZerosCount: 10,
 			Date:       time.Now().Unix(),
 			Resource:   "client1",
-			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", 123460))),
+			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", randKey))),
 			Counter:    0,
 		}
 		marshaled, err := json.Marshal(hashcash)
@@ -116,7 +123,12 @@ func TestProcessRequest(t *testing.T) {
 		assert.Equal(t, "invalid hashcash", err.Error())
 	})
 
-	t.Run("Request resource with invalid solution", func(t *testing.T) {
+	t.Run("Request resource with expired solution", func(t *testing.T) {
+		mockClock.NowFunc = func() time.Time {
+			return time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC)
+		}
+		cacheInst.Add(randKey, 100)
+
 		mockClock.NowFunc = func() time.Time {
 			return time.Date(2022, 3, 13, 2, 40, 0, 0, time.UTC)
 		}
@@ -125,7 +137,7 @@ func TestProcessRequest(t *testing.T) {
 			ZerosCount: 10,
 			Date:       time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC).Unix(),
 			Resource:   "client1",
-			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", 123460))),
+			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", randKey))),
 			Counter:    100,
 		}
 		marshaled, err := json.Marshal(hashcash)
@@ -134,28 +146,16 @@ func TestProcessRequest(t *testing.T) {
 		msg, err := ProcessRequest(ctx, input, "client1")
 		require.Error(t, err)
 		assert.Nil(t, msg)
-		assert.Equal(t, "challenge expired", err.Error())
-	})
-
-	t.Run("Request resource with expired solution", func(t *testing.T) {
-		hashcash := pow.HashcashData{
-			Version:    1,
-			ZerosCount: 10,
-			Date:       time.Now().Unix(),
-			Resource:   "client1",
-			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", 123460))),
-			Counter:    100,
-		}
-		marshaled, err := json.Marshal(hashcash)
-		require.NoError(t, err)
-		input := fmt.Sprintf("%d|%s", protocol.RequestResource, string(marshaled))
-		msg, err := ProcessRequest(ctx, input, "client1")
-		require.Error(t, err)
-		assert.Nil(t, msg)
-		assert.Equal(t, "invalid hashcash", err.Error())
+		assert.Equal(t, "challenge expired or not sent", err.Error())
 	})
 
 	t.Run("Request resource with correct solution", func(t *testing.T) {
+		mockClock.NowFunc = func() time.Time {
+			return time.Date(2022, 3, 13, 2, 30, 0, 0, time.UTC)
+		}
+		err := cacheInst.Add(randKey, 200)
+		assert.NoError(t, err)
+
 		mockClock.NowFunc = func() time.Time {
 			return time.Date(2022, 3, 13, 2, 32, 0, 0, time.UTC)
 		}
@@ -165,7 +165,7 @@ func TestProcessRequest(t *testing.T) {
 			ZerosCount: 3,
 			Date:       date.Unix(),
 			Resource:   "client1",
-			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", 123460))),
+			Rand:       base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", randKey))),
 			Counter:    5001,
 		}
 		marshaled, err := json.Marshal(hashcash)
@@ -175,5 +175,16 @@ func TestProcessRequest(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, msg)
 		assert.Contains(t, Quotes, msg.Payload)
+
+		// check that rand key was deleted from cache
+		exists, err := cacheInst.Get(randKey)
+		assert.NoError(t, err)
+		assert.False(t, exists)
+
+		// request server second time
+		msg, err = ProcessRequest(ctx, input, "client1")
+		require.Error(t, err)
+		assert.Nil(t, msg)
+		assert.Equal(t, "challenge expired or not sent", err.Error())
 	})
 }

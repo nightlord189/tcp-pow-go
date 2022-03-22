@@ -90,7 +90,8 @@ But complexity of challenge could be dynamically solved by changing of required 
 2. Pre-computing challenges in advance before DDOS-attack. 
 Some clients could parse protocol and compute many challenges to apply all of it in one moment.
 It could be solved by additional validation of hashcash's params on server. 
-For example, on creating challenge server could save **rand** value to Redis cache and check it's existence on verify step.
+For example, on creating challenge server could save **rand** value to Redis cache and check it's existence on verify step
+(that is implemented in this solution).
 
 But all of those disadvantages could be solved in real production environment. 
 
@@ -112,5 +113,4 @@ Of course, every project could be improved. This project also has some ways to i
 + add dynamic management of Hashcash complexity based on server's overload 
 (to improve DDOS protection)
 + move array of quotes to SQLite or PostgreSQL database (to get closer to real production applications)
-+ add integration with Redis cache to additional verification of client's challenges (check **rand** value existence)
 + add integration tests for simulate DDOS attack - spawn more client instances
