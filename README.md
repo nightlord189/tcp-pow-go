@@ -1,5 +1,7 @@
 # "Word of Wisdom" TCP-server with protection from DDOS based on Proof of Work
 
+[![Actions Status](https://github.com/nightlord189/tcp-pow-go/workflows/main/badge.svg)](https://github.com/nightlord189/tcp-pow-go/actions)
+
 ## 1. Description
 This project is a solution for some interview question on Golang.
 
